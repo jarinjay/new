@@ -1,0 +1,83 @@
+# === Configuration ===
+$hecToken = "<SPLUNK_HEC_TOKEN>"
+$hecEndpoint = "<SPLUNK_HEC_URL>"
+
+$now = [int64]((Get-Date).ToUniversalTime() - [datetime]'1970-01-01').TotalSeconds * 1000
+
+# === Extract branch name ===
+$branchName = "$(Build.SourceBranch)"
+if ($branchName -match "refs/heads/(.*)") {
+    $branchName = $Matches[1]
+}
+
+# === Get build timeline ===
+$buildTimeline = Invoke-RestMethod -Uri "https://dev.azure.com/$(System.TeamProject)/_apis/build/builds/$(Build.BuildId)/timeline?api-version=7.1-preview.1" `
+  -Headers @{ Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN" } `
+  -Method Get
+
+# === Prepare metrics array ===
+$allMetrics = @()
+
+foreach ($record in $buildTimeline.records) {
+    if ($record.type -eq "Task") {
+        $task = $record
+        $startTime = [datetime]$task.startTime
+        $finishTime = [datetime]$task.finishTime
+        $duration = [math]::Round(($finishTime - $startTime).TotalSeconds, 2)
+
+        $dimensions = @{
+            pipeline_id       = "$(System.DefinitionId)"
+            pipeline_name     = "$(System.DefinitionName)"
+            pipeline_run_id   = "$(Build.BuildId)"
+            pipeline_run_name = "$(Build.BuildNumber)"
+            template          = "${{ parameters.template }}"
+            stageName         = "$(System.StageDisplayName)"
+            jobName           = "$(System.JobDisplayName)"
+            taskName          = $task.name
+            taskResult        = $task.result
+            branch_name       = $branchName
+        }
+
+        $allMetrics += @(
+            @{
+                metric     = "metric.pipeline.run.task.duration"
+                value      = $duration
+                timestamp  = $now
+                dimensions = $dimensions
+            },
+            @{
+                metric     = "metric.pipeline.run.task.start"
+                value      = 1
+                timestamp  = [int64]((Get-Date $task.startTime).ToUniversalTime() - [datetime]'1970-01-01').TotalSeconds * 1000
+                dimensions = $dimensions
+            },
+            @{
+                metric     = "metric.pipeline.run.task.finish"
+                value      = 1
+                timestamp  = [int64]((Get-Date $task.finishTime).ToUniversalTime() - [datetime]'1970-01-01').TotalSeconds * 1000
+                dimensions = $dimensions
+            }
+        )
+    }
+}
+
+# === Add 1 metric per pipeline run (for run count) ===
+$runDimensions = @{
+    pipeline_id     = "$(System.DefinitionId)"
+    pipeline_name   = "$(System.DefinitionName)"
+    pipeline_run_id = "$(Build.BuildId)"
+    branch_name     = $branchName
+}
+
+$allMetrics += @{
+    metric     = "metric.pipeline.run.count"
+    value      = 1
+    timestamp  = $now
+    dimensions = $runDimensions
+}
+
+# === Final: Send all metrics together in one call ===
+Invoke-RestMethod -Uri $hecEndpoint -Method Post -Headers @{
+    "Content-Type" = "application/json"
+    "X-SF-TOKEN"   = $hecToken
+} -Body (ConvertTo-Json $allMetrics -Depth 10)
