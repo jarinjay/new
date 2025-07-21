@@ -40,3 +40,19 @@ Invoke-RestMethod -Method Post -Uri $splunkUrl `
     -Headers @{ "Authorization" = "Splunk $hecToken" } `
     -Body $jsonPayload `
     -ContentType "application/json"
+
+
+#######################################################################################################################
+
+
+# Assuming you already have $runId, $project, $organization, and $headers defined
+
+$buildDetailsUrl = "https://dev.azure.com/$organization/$project/_apis/build/builds/$runId?api-version=7.1-preview.7"
+$buildDetails = Invoke-RestMethod -Uri $buildDetailsUrl -Headers $headers -Method Get
+
+$startTime = Get-Date $buildDetails.startTime
+$finishTime = Get-Date $buildDetails.finishTime
+$duration = New-TimeSpan -Start $startTime -End $finishTime
+
+# Example output
+Write-Host "Pipeline Run Duration: $($duration.TotalMinutes) minutes"
