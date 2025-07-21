@@ -1,0 +1,42 @@
+# Variables
+$organization = "your-org"
+$project = "your-project"
+$pipelineId = "1"  # Pipeline Definition ID
+$pat = "your-azure-devops-pat"
+$hecToken = "your-splunk-hec-token"
+$splunkUrl = "https://ingest.<realm>.signalfx.com/v1/log"
+
+# Base64-encoded PAT for Azure DevOps API
+$headers = @{
+    Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$pat"))
+}
+
+# Get latest pipeline run
+$runUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$pipelineId/runs?api-version=7.1-preview.1"
+$runData = Invoke-RestMethod -Uri $runUrl -Headers $headers -Method Get
+$latestRun = $runData.value | Sort-Object -Property createdDate -Descending | Select-Object -First 1
+
+# Extract telemetry
+$telemetry = @{
+    pipelineName = $latestRun.pipeline.name
+    runId = $latestRun.id
+    status = $latestRun.state
+    result = $latestRun.result
+    createdDate = $latestRun.createdDate
+    finishedDate = $latestRun.finishedDate
+    sourceBranch = $latestRun.sourceBranch
+    commitId = $latestRun.sourceVersion
+    triggeredBy = $latestRun.triggerInfo.'ci.sourceSha'
+}
+
+# Convert telemetry to JSON
+$jsonPayload = @{
+    event = "azure_devops_pipeline_run"
+    fields = $telemetry
+} | ConvertTo-Json -Depth 10
+
+# Send to Splunk
+Invoke-RestMethod -Method Post -Uri $splunkUrl `
+    -Headers @{ "Authorization" = "Splunk $hecToken" } `
+    -Body $jsonPayload `
+    -ContentType "application/json"
