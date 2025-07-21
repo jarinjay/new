@@ -1,0 +1,87 @@
+trigger: none  # Do not trigger automatically — intended to be triggered from another pipeline or webhook
+
+pr: none
+
+parameters:
+  - name: pipelineId
+    type: string
+  - name: runId
+    type: string
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  organization: 'your-org'
+  project: 'your-project'
+  splunkUrl: 'https://ingest.<realm>.signalfx.com/v1/log'
+
+stages:
+  - stage: SendTelemetry
+    displayName: "Send Pipeline Telemetry to Splunk"
+    jobs:
+      - job: SendTelemetryJob
+        steps:
+          - task: PowerShell@2
+            displayName: "Send telemetry via PowerShell"
+            inputs:
+              targetType: 'inline'
+              script: |
+                $ErrorActionPreference = "Stop"
+
+                # Parameters & Secrets
+                $pipelineId = '${{ parameters.pipelineId }}'
+                $runId = '${{ parameters.runId }}'
+                $organization = "$(organization)"
+                $project = "$(project)"
+                $splunkUrl = "$(splunkUrl)"
+                $pat = "$(azureDevOpsPAT)"       # Use variable group or key vault
+                $hecToken = "$(splunkHECToken)"  # Use variable group or key vault
+
+                $headers = @{
+                    Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$pat"))
+                }
+
+                try {
+                    $buildUrl = "https://dev.azure.com/$organization/$project/_apis/build/builds/$runId?api-version=7.1-preview.7"
+                    $build = Invoke-RestMethod -Uri $buildUrl -Headers $headers -Method Get
+
+                    if (-not $build.finishedDate) {
+                        Write-Host "❗ Run $runId not finished yet."
+                        return
+                    }
+
+                    $startTime = Get-Date $build.startTime
+                    $endTime = Get-Date $build.finishTime
+                    $durationSeconds = [math]::Round((New-TimeSpan -Start $startTime -End $endTime).TotalSeconds, 2)
+
+                    $telemetry = @{
+                        pipelineId      = $pipelineId
+                        runId           = $runId
+                        pipelineName    = $build.definition.name
+                        project         = $project
+                        organization    = $organization
+                        status          = $build.status
+                        result          = $build.result
+                        sourceBranch    = $build.sourceBranch
+                        commitId        = $build.sourceVersion
+                        startTime       = $build.startTime
+                        finishTime      = $build.finishTime
+                        durationSeconds = $durationSeconds
+                    }
+
+                    $jsonPayload = @{
+                        event  = "azure_devops_pipeline_run"
+                        fields = $telemetry
+                    } | ConvertTo-Json -Depth 10
+
+                    Invoke-RestMethod -Method Post -Uri $splunkUrl `
+                        -Headers @{ "Authorization" = "Splunk $hecToken" } `
+                        -Body $jsonPayload `
+                        -ContentType "application/json"
+
+                    Write-Host "✅ Telemetry for run $runId sent to Splunk."
+                } catch {
+                    Write-Error "❌ Failed to send telemetry: $_"
+                }
+
