@@ -1,0 +1,80 @@
+# --- CONFIGURATION ---
+$organization = "your-org"
+$project = "your-project"
+$pipelineId = "1"
+$pat = "your-azure-devops-pat"
+$hecToken = "your-splunk-hec-token"
+$splunkUrl = "https://ingest.<realm>.signalfx.com/v1/log"
+
+# --- Auth Header ---
+$headers = @{
+    Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$pat"))
+}
+
+try {
+    # --- Get Latest Completed Pipeline Run ---
+    $runUrl = "https://dev.azure.com/$organization/$project/_apis/pipelines/$pipelineId/runs?api-version=7.1-preview.1"
+    $runData = Invoke-RestMethod -Uri $runUrl -Headers $headers -Method Get
+
+    $latestRun = $runData.value |
+        Where-Object { $_.state -eq "completed" } |
+        Sort-Object -Property createdDate -Descending |
+        Select-Object -First 1
+
+    if (-not $latestRun) {
+        Write-Host "❗ No completed pipeline runs found."
+        return
+    }
+
+    if (-not $latestRun.finishedDate) {
+        Write-Host "❗ Run $($latestRun.id) is not finished yet. Skipping telemetry."
+        return
+    }
+
+    # --- Duration Calculation ---
+    try {
+        $startTime = Get-Date $latestRun.createdDate
+        $endTime = Get-Date $latestRun.finishedDate
+        $durationSeconds = [math]::Round((New-TimeSpan -Start $startTime -End $endTime).TotalSeconds, 2)
+    } catch {
+        Write-Error "❌ Failed to calculate duration: $_"
+        $durationSeconds = $null
+    }
+
+    # --- Build Telemetry Payload ---
+    $telemetry = @{
+        pipelineName    = $latestRun.pipeline.name
+        runId           = $latestRun.id
+        pipelineId      = $pipelineId
+        project         = $project
+        organization    = $organization
+        status          = $latestRun.state
+        result          = $latestRun.result
+        createdDate     = $latestRun.createdDate
+        finishedDate    = $latestRun.finishedDate
+        durationSeconds = $durationSeconds
+        sourceBranch    = $latestRun.sourceBranch
+        commitId        = $latestRun.sourceVersion
+        triggeredBy     = $latestRun.triggerInfo.'ci.sourceSha'
+    }
+
+    $jsonPayload = @{
+        event  = "azure_devops_pipeline_run"
+        fields = $telemetry
+    } | ConvertTo-Json -Depth 10
+
+    # --- Send to Splunk ---
+    try {
+        $response = Invoke-RestMethod -Method Post -Uri $splunkUrl `
+            -Headers @{ "Authorization" = "Splunk $hecToken" } `
+            -Body $jsonPayload `
+            -ContentType "application/json"
+
+        Write-Host "✅ Telemetry for run $($latestRun.id) sent to Splunk successfully."
+    } catch {
+        Write-Error "❌ Failed to send telemetry to Splunk: $_"
+    }
+
+} catch {
+    Write-Error "❌ General error occurred while processing pipeline telemetry: $_"
+}
