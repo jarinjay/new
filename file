@@ -1,0 +1,29 @@
+Application-Level Monitoring Use Cases
+API & Integration Health
+
+Monitor success/failure rate of consumed and exposed APIs.
+
+Track timeouts, failed authentications, or schema mismatches.
+
+Slow Screen & API Execution
+
+Monitor average screen load times and long-running queries.
+
+Use APM tools (like New Relic, AppDynamics, or Dynatrace) with OutSystems.
+
+Error & Exception Monitoring
+
+Capture exceptions in Service Center logs.
+
+Alert on high exception rates or specific error patterns.
+
+User Experience Monitoring
+
+Track navigation patterns, session lengths, and device/browser types.
+
+Identify pages/screens with high bounce rates or drop-offs.
+
+Mobile App Crashes
+
+Use crash reporting tools for native or hybrid OutSystems mobile apps (e.g., Firebase Crashlytics).
+
