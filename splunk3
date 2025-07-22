@@ -1,0 +1,49 @@
+# ---- Metric Conversion ----
+# pipeline_run_result: map string to number
+switch ($build.result.ToLower()) {
+    "succeeded" { $resultCode = 1 }
+    "partiallySucceeded" { $resultCode = 2 }
+    default { $resultCode = 0 }  # failed or canceled
+}
+
+$metricPayload = @{
+    gauges = @(
+        @{
+            metric = "azure.devops.pipeline_run_duration_seconds"
+            value  = $durationSeconds
+            dimensions = @{
+                pipelineId   = "$pipelineId"
+                runId        = "$runId"
+                project      = "$project"
+                organization = "$organization"
+                status       = $build.status
+                result       = $build.result
+                branch       = $build.sourceBranch
+            }
+        },
+        @{
+            metric = "azure.devops.pipeline_run_result"
+            value  = $resultCode
+            dimensions = @{
+                pipelineId   = "$pipelineId"
+                runId        = "$runId"
+                project      = "$project"
+                organization = "$organization"
+                branch       = $build.sourceBranch
+            }
+        }
+    )
+} | ConvertTo-Json -Depth 10
+
+# ---- Send to Splunk Observability as Metric ----
+try {
+    Invoke-RestMethod -Method Post `
+        -Uri "$($splunkUrl -replace '/v1/log$', '/v2/datapoint')" `
+        -Headers @{ "Authorization" = "Splunk $hecToken" } `
+        -Body $metricPayload `
+        -ContentType "application/json"
+
+    Write-Host "📊 Metrics sent to Splunk Observability successfully."
+} catch {
+    Write-Error "❌ Failed to send metrics to Splunk Observability: $_"
+}
