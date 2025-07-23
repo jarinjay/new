@@ -1,2 +1,20 @@
 A = data("azure.pipeline.run.count", rollup="count").sum(by=["pipeline_name"])
 B = A.sum(by=["pipeline_name"]).publish(label="Pipeline Runs")
+=================================================================================================================
+
+
+$timestampEpoch = [int][double]::Parse(($createdDate - [datetime]'1970-01-01').TotalSeconds)
+
+# Format for display
+$formattedDateTime = $createdDate.ToString("dd-MM-yyyy HH:mm:ss")
+
+Write-Host "Run ID $($run.id) | Created: $formattedDateTime | Epoch: $timestampEpoch"
+
+
+
+==============
+
+$dimensions = @{
+    ...
+    "run_date_time" = $formattedDateTime
+}
