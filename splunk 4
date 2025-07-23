@@ -1,0 +1,2 @@
+A = data("azure.pipeline.run.count", rollup="count").sum(by=["pipeline_name"])
+B = A.sum(by=["pipeline_name"]).publish(label="Pipeline Runs")
