@@ -1,0 +1,28 @@
+AzCopy does not have any explicit limitations based on file type — it copies all file types (binary, text, executables, etc.) as long as:
+
+The file is accessible to the process.
+
+The filename and path comply with Azure Storage naming rules.
+
+The total length of the blob name is within limits (1024 characters).
+
+The file isn't locked or in use during transfer.
+
+Common Reasons for AzCopy Failures (like your ~1290 files):
+File locks / open files: If files were in use (e.g., by an application), they might have been skipped.
+
+Path length issues: Windows has a max path length (260 chars by default); AzCopy might have trouble reading them.
+
+Special characters in filenames: Certain characters are unsupported or not encoded correctly in URLs.
+
+Permission issues: AzCopy process might not have read access to some files.
+
+Too many small files too quickly: High rate of small file copies can cause throttling or timeouts.
+
+Files added/removed during transfer: If files were changing during copy, mismatches happen.
+
+Storage Account Limits: Not usually a problem unless you're hitting request rate limits (e.g., ingress throttling).
+
+Name conflicts: Files with same name but different casing (on case-insensitive systems) may overwrite or fail.
+
+Symlinks / junctions: Not always handled correctly unless specific flags are used.
