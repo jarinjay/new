@@ -1,28 +1,224 @@
-AzCopy does not have any explicit limitations based on file type — it copies all file types (binary, text, executables, etc.) as long as:
 
-The file is accessible to the process.
 
-The filename and path comply with Azure Storage naming rules.
+🔶 1. Business Performance Monitoring
+KPI Monitoring
 
-The total length of the blob name is within limits (1024 characters).
+Monitor revenue impact per feature release
 
-The file isn't locked or in use during transfer.
+Track conversion rates across platforms
 
-Common Reasons for AzCopy Failures (like your ~1290 files):
-File locks / open files: If files were in use (e.g., by an application), they might have been skipped.
+Measure performance of new campaigns
 
-Path length issues: Windows has a max path length (260 chars by default); AzCopy might have trouble reading them.
+Alert when business KPIs deviate from targets
 
-Special characters in filenames: Certain characters are unsupported or not encoded correctly in URLs.
+SLA compliance for user transactions
 
-Permission issues: AzCopy process might not have read access to some files.
+Monitor sales funnel drop-offs
 
-Too many small files too quickly: High rate of small file copies can cause throttling or timeouts.
+Executive dashboards for C-level stakeholders
 
-Files added/removed during transfer: If files were changing during copy, mismatches happen.
+Revenue per user segment
 
-Storage Account Limits: Not usually a problem unless you're hitting request rate limits (e.g., ingress throttling).
+Business-hour-only alerting
 
-Name conflicts: Files with same name but different casing (on case-insensitive systems) may overwrite or fail.
+Geographic business performance comparison
 
-Symlinks / junctions: Not always handled correctly unless specific flags are used.
+🔶 2. Digital Experience Monitoring
+Real User Monitoring (RUM)
+
+Track page load times by location
+
+Detect session errors impacting users
+
+Monitor mobile vs desktop experience
+
+Report on browser-specific failures
+
+Measure click-to-response time
+
+Synthetic User Monitoring (SUM)
+
+Simulate login flow every 5 minutes
+
+Alert on failed checkout process
+
+Availability monitoring from global regions
+
+SLA uptime checks
+
+Verify CDN performance
+
+🔶 3. Service Health Monitoring
+Service Level Monitoring
+
+Monitor SLAs on API response time
+
+Alert on service degradation
+
+Track error rates per service
+
+Health check dashboards for microservices
+
+Compare availability monthly
+
+Mean Time To X Monitoring
+
+MTTR trends per system
+
+MTBF across components
+
+MTTA (alert to acknowledgment)
+
+Root cause analysis time tracking
+
+Mean time to recovery tracking for critical apps
+
+🔶 4. Business Process & Chain Monitoring
+E2E Chain Monitoring
+
+Monitor file flow across external and internal systems
+
+Visualize business process flows
+
+Alert on broken batch chains
+
+Exception handling in workflow steps
+
+SLA monitoring for entire workflows
+
+External vendor data flow check
+
+Track data movement from ingestion to reporting
+
+Delayed chain execution alerts
+
+Correlate process duration with outcomes
+
+Real-time business event monitoring
+
+🔶 5. Application Monitoring
+Application Performance Monitoring
+
+Track application latency
+
+Monitor error rates
+
+Transaction tracing
+
+Garbage collection monitoring
+
+Application availability per endpoint
+
+Normal Application Monitoring
+
+Memory & CPU usage
+
+Log aggregation and alerting
+
+Port availability monitoring
+
+Config file drift detection
+
+Restart count of app services
+
+Database Application Monitoring
+
+Query performance
+
+Connection pool monitoring
+
+Slow query logging
+
+Deadlock detection
+
+DB cache hit ratio
+
+Middleware Monitoring
+
+JMS queue size
+
+WebLogic/IBM MQ performance
+
+Connection leak alerts
+
+Middleware restart detection
+
+Middleware response time tracking
+
+🔶 6. IT Infrastructure Monitoring
+Network Monitoring
+
+Interface status and errors
+
+Packet loss detection
+
+Network latency trends
+
+Port scans or unauthorized traffic
+
+VPN tunnel availability
+
+Container Monitoring
+
+Public CM / Private CM
+
+Pod crash alerting
+
+CPU/mem usage per container
+
+Kubernetes node availability
+
+Image version drift
+
+Pod restart count
+
+IAAS Monitoring
+
+Public IM / Private IM / VMware
+
+VM disk space monitoring
+
+Guest OS patch status
+
+Host node health
+
+HA VM failover tracking
+
+VM backup job success
+
+PAAS Monitoring
+
+Azure App Service availability
+
+Azure Functions cold start
+
+Azure SQL DTU usage
+
+Azure Event Hub throughput
+
+Platform throttling alerts
+
+Database Infra Monitoring
+
+SQL Server availability
+
+SQL failover events
+
+Cluster node health
+
+TempDB usage
+
+Log shipping status
+
+Workplace Monitoring
+
+End-user device status
+
+Patch status on endpoints
+
+Antivirus update state
+
+Login success rate
+
+Disk space alerts on user devices
+
