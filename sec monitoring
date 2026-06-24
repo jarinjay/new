@@ -1,0 +1,1179 @@
+Here are top 10 security monitoring use cases for File Share Servers such as Windows File Servers, SMB shares, DFS shares, or NAS-backed shares.
+
+#	Security Monitoring Use Case	What to Detect	Why It Matters
+1	Mass File Deletion	A user or process deleting many files within a short time	Could indicate ransomware, insider threat, or accidental bulk deletion
+2	Mass File Modification / Encryption Behavior	Many files renamed, modified, or extensions changed rapidly	Strong indicator of ransomware activity
+3	Unauthorized Access to Sensitive Shares	Access attempts to finance, HR, legal, backup, or admin shares by unauthorized users	Helps detect privilege abuse or compromised accounts
+4	Failed Access Attempts to File Shares	Repeated failed access attempts on SMB shares	May indicate brute-force attempts, misused credentials, or reconnaissance
+5	Permission Changes on Shares or Folders	ACL changes, new users/groups added, Everyone/Authenticated Users granted access	Prevents privilege escalation and accidental exposure
+6	Access Outside Business Hours	File access, copy, delete, or permission changes during unusual hours	Useful for detecting compromised accounts or insider activity
+7	Large Data Copy or Exfiltration	Large volume of files copied, downloaded, or read by one user/system	Could indicate data theft or compromised endpoint activity
+8	Access from Unusual Source Systems	File share access from unknown servers, workstations, VPN IPs, or non-standard locations	Helps detect lateral movement or unauthorized systems
+9	Admin Share Access Monitoring	Access to C$, D$, ADMIN$, hidden shares, or management shares	Attackers often use admin shares for lateral movement
+10	Service Account Misuse	Interactive logon, unusual file access, or permission changes by service accounts	Service accounts are high-value targets and should have predictable behavior
+
+For a strong monitoring design, I would prioritize these first:
+
+High priority
+
+Mass file modification or encryption behavior
+Mass deletion
+Permission changes
+Large data copy or exfiltration
+Admin share access
+
+Useful log sources
+
+Windows Security Event Logs
+File Share Auditing
+Object Access Auditing
+Sysmon, if deployed
+Microsoft Defender for Endpoint
+Microsoft Sentinel or Splunk
+Storage/NAS audit logs
+Active Directory logs
+VPN and firewall logs
+
+Example detection logic:
+
+Trigger alert when:
+A single user modifies, renames, or deletes more than 500 files
+within 10 minutes
+on a sensitive file share.
+
+Example alert name:
+
+Possible ransomware activity on file share server
+
+Recommended alert severity:
+
+Use Case	Severity
+Mass encryption/modification	Critical
+Mass deletion	High/Critical
+Permission change on sensitive share	High
+Large data copy	High
+Failed access attempts	Medium
+Access outside business hours	Medium
+Admin share access	Medium/High
+Service account misuse	High
+its a windows server, can you tell me how we can do this?
+
+I’ll map this to a practical Windows Server setup: what to enable on the file server, which Event IDs to collect, and how to turn them into alert rules in a SIEM such as Splunk, Sentinel, or Grafana/Loki.
+
+Thought for a couple of seconds
+
+Yes. For Windows File Share Servers, you can build security monitoring mainly using:
+
+Windows Security Event Logs
+Advanced Audit Policy
+File/folder SACL auditing
+SMB share auditing
+SIEM alert rules in Splunk, Sentinel, Grafana, etc.
+Optional: Sysmon and Microsoft Defender for Endpoint
+
+Below is a practical implementation approach.
+
+1. Enable Windows audit policies
+
+On the file share server, enable these audit policies using Group Policy.
+
+Go to:
+
+Computer Configuration
+ -> Windows Settings
+ -> Security Settings
+ -> Advanced Audit Policy Configuration
+ -> Audit Policies
+
+Enable these:
+
+Audit Policy	Enable
+Audit File System	Success and Failure
+Audit File Share	Success and Failure
+Audit Detailed File Share	Success and Failure
+Audit Handle Manipulation	Success and Failure
+Audit Logon	Success and Failure
+Audit Account Logon	Success and Failure
+Audit Security Group Management	Success and Failure
+Audit Authorization Policy Change	Success and Failure
+
+You can also configure using PowerShell:
+
+auditpol /set /subcategory:"File System" /success:enable /failure:enable
+auditpol /set /subcategory:"File Share" /success:enable /failure:enable
+auditpol /set /subcategory:"Detailed File Share" /success:enable /failure:enable
+auditpol /set /subcategory:"Handle Manipulation" /success:enable /failure:enable
+auditpol /set /subcategory:"Logon" /success:enable /failure:enable
+auditpol /set /subcategory:"Account Logon" /success:enable /failure:enable
+auditpol /set /subcategory:"Security Group Management" /success:enable /failure:enable
+auditpol /set /subcategory:"Authorization Policy Change" /success:enable /failure:enable
+
+Verify:
+
+auditpol /get /category:*
+2. Enable auditing on the actual shared folders
+
+This is very important. Enabling audit policy alone is not enough. You must also configure auditing on the folders you want to monitor.
+
+Example folder:
+
+D:\Shares\Finance
+D:\Shares\HR
+D:\Shares\Legal
+D:\Shares\Projects
+
+Go to:
+
+Folder Properties
+ -> Security
+ -> Advanced
+ -> Auditing
+ -> Add
+
+Add auditing for relevant users/groups, for example:
+
+Everyone
+Authenticated Users
+Domain Users
+
+But for production, avoid auditing everything everywhere. Start with sensitive shares.
+
+Recommended auditing permissions:
+
+Action	Audit
+Read data / List folder	Success and Failure
+Create files / Write data	Success and Failure
+Delete	Success and Failure
+Delete subfolders and files	Success and Failure
+Change permissions	Success and Failure
+Take ownership	Success and Failure
+
+For ransomware and insider-threat monitoring, at minimum audit:
+
+Write
+Delete
+Change permissions
+Take ownership
+3. Important Windows Event IDs to collect
+
+Forward these logs from the Windows file server to your SIEM.
+
+File access and modification
+Event ID	Meaning
+4663	An attempt was made to access an object
+4656	A handle to an object was requested
+4660	An object was deleted
+4658	The handle to an object was closed
+4670	Permissions on an object were changed
+5140	A network share object was accessed
+5145	A network share object was checked to see whether client can be granted access
+
+The most useful ones are usually:
+
+4663
+4660
+4670
+5140
+5145
+4. Map the top use cases to Windows events
+Use Case 1: Mass file deletion
+
+Detect when one user deletes many files in a short time.
+
+Main Event IDs:
+
+4660
+4663
+
+Look for access masks related to delete activity.
+
+Useful fields:
+
+SubjectUserName
+ObjectName
+ObjectType
+AccessMask
+ProcessName
+Computer
+TimeGenerated
+
+Example detection logic:
+
+Alert when same user deletes more than 100 files within 10 minutes
+on the same file server or same share.
+
+Example alert:
+
+Possible mass file deletion on Windows file share
+
+Severity:
+
+High or Critical
+Use Case 2: Ransomware-like mass modification
+
+Detect many file modifications, renames, or extension changes.
+
+Main Event IDs:
+
+4663
+4656
+5145
+
+Look for many write operations from the same user or host.
+
+Typical suspicious behavior:
+
+.docx -> .locked
+.xlsx -> .encrypted
+.pdf -> .abcxyz
+Large number of write operations
+Large number of rename operations
+Same user touching many folders quickly
+
+Example detection logic:
+
+Alert when same user modifies more than 500 files within 10 minutes,
+especially across multiple directories.
+
+Also monitor suspicious file extensions:
+
+.locked
+.encrypted
+.crypt
+.crypto
+.ryk
+.conti
+.blackcat
+
+Severity:
+
+Critical
+Use Case 3: Permission changes on sensitive folders
+
+Detect ACL changes on shared folders.
+
+Main Event ID:
+
+4670
+
+Also useful:
+
+4719 - System audit policy was changed
+4732 - Member added to security-enabled local group
+4738 - User account changed
+
+Example detection logic:
+
+Alert when permissions are changed on Finance, HR, Legal, Backup, or Admin shares.
+
+High-risk permission changes:
+
+Everyone = Full Control
+Authenticated Users = Full Control
+Domain Users = Modify
+Unknown user added
+External/vendor account added
+
+Severity:
+
+High
+Use Case 4: Unauthorized access to sensitive shares
+
+Detect access to restricted folders by users who should not access them.
+
+Main Event IDs:
+
+5140
+5145
+4663
+
+Example sensitive shares:
+
+\\server\Finance
+\\server\HR
+\\server\Legal
+\\server\Backups
+\\server\Admin
+
+Example detection logic:
+
+Alert when a user outside the approved AD group accesses a sensitive share.
+
+Example:
+
+User is not member of SG-FILE-Finance-RW or SG-FILE-Finance-RO
+but accessed \\fileserver01\Finance.
+
+Severity:
+
+Medium or High
+Use Case 5: Large data copy or possible exfiltration
+
+Windows file auditing does not always directly say “copied,” but you can detect suspicious read volume.
+
+Main Event IDs:
+
+4663
+5145
+
+Look for:
+
+High number of file read events
+Many different files accessed
+Access from unusual workstation
+Access outside business hours
+Access to sensitive share
+
+Example detection logic:
+
+Alert when one user reads more than 1,000 files or accesses more than 5 GB of files
+from a sensitive share within 30 minutes.
+
+For file size-based detection, you may need additional telemetry from:
+
+Defender for Endpoint
+Storage/NAS audit logs
+File server EDR
+PowerShell inventory
+Custom script
+
+Severity:
+
+High
+Use Case 6: Failed access attempts
+
+Detect repeated denied access to file shares.
+
+Main Event IDs:
+
+5145
+4656
+4663
+
+Look for failed events.
+
+Example detection logic:
+
+Alert when same user has more than 20 failed access attempts
+to the same file share within 10 minutes.
+
+Possible causes:
+
+User probing folders
+Compromised account
+Incorrect permissions
+Application misconfiguration
+Brute-force or reconnaissance
+
+Severity:
+
+Medium
+Use Case 7: Admin share access
+
+Monitor access to:
+
+C$
+D$
+ADMIN$
+IPC$
+
+Main Event IDs:
+
+5140
+5145
+4624
+
+Example detection logic:
+
+Alert when non-admin user accesses C$, D$, ADMIN$, or hidden administrative shares.
+
+Also correlate with logon type:
+
+Event ID	Meaning
+4624	Successful logon
+4625	Failed logon
+
+For SMB access, logon type is usually:
+
+Logon Type 3 - Network
+
+Severity:
+
+High
+Use Case 8: Access outside business hours
+
+Main Event IDs:
+
+4663
+5140
+5145
+4670
+
+Example detection logic:
+
+Alert when sensitive share access happens outside 07:00 - 19:00,
+or during weekends/public holidays.
+
+Better logic:
+
+Only alert for write, delete, permission change, or mass read activity outside business hours.
+
+Severity:
+
+Medium
+Use Case 9: Service account misuse
+
+Service accounts should normally behave predictably.
+
+Monitor:
+
+Interactive logon
+Access from unusual host
+Access to unusual share
+Permission changes
+Large file access
+Failed logons
+
+Useful Event IDs:
+
+4624
+4625
+4663
+4670
+5140
+5145
+
+Suspicious logon types:
+
+Logon Type	Meaning
+2	Interactive
+10	Remote Interactive / RDP
+3	Network
+
+Example detection logic:
+
+Alert when a service account performs interactive logon,
+changes permissions,
+or accesses shares outside its normal pattern.
+
+Severity:
+
+High
+Use Case 10: Audit policy or logging tampering
+
+Attackers may try to disable auditing.
+
+Monitor these Event IDs:
+
+Event ID	Meaning
+4719	System audit policy changed
+1102	Security audit log was cleared
+104	Event log was cleared
+4902	Per-user audit policy table created
+4907	Auditing settings on object changed
+
+Example detection logic:
+
+Alert immediately when Windows Security log is cleared
+or audit policy is changed on a file server.
+
+Severity:
+
+Critical
+5. Recommended collection architecture
+
+For an enterprise setup, use this flow:
+
+Windows File Server
+   ↓
+Windows Event Forwarding / Agent
+   ↓
+SIEM / Log Platform
+   ↓
+Correlation Rules
+   ↓
+Alert / Incident / Ticket
+
+Examples:
+
+Windows Server → Splunk Universal Forwarder → Splunk Enterprise/Splunk Cloud
+Windows Server → Azure Monitor Agent → Microsoft Sentinel
+Windows Server → Grafana Alloy / OpenTelemetry Collector → Loki
+Windows Server → Defender for Endpoint → Microsoft Defender XDR
+6. Example Splunk-style detection queries
+Mass deletion
+index=windows sourcetype=WinEventLog:Security EventCode IN (4660,4663)
+ObjectName="D:\\Shares\\*"
+AccessMask IN ("0x10000","%%1537")
+| bucket _time span=10m
+| stats count dc(ObjectName) as unique_files by _time, SubjectUserName, Computer
+| where count > 100 OR unique_files > 100
+Permission change
+index=windows sourcetype=WinEventLog:Security EventCode=4670
+ObjectName="D:\\Shares\\*"
+| table _time Computer SubjectUserName ObjectName ProcessName
+Access to admin shares
+index=windows sourcetype=WinEventLog:Security EventCode IN (5140,5145)
+ShareName IN ("\\\\*\\C$","\\\\*\\D$","\\\\*\\ADMIN$")
+| table _time Computer SubjectUserName IpAddress ShareName RelativeTargetName
+File share access outside business hours
+index=windows sourcetype=WinEventLog:Security EventCode IN (4663,5140,5145)
+ObjectName="D:\\Shares\\*"
+| eval hour=strftime(_time,"%H")
+| where hour < 7 OR hour > 19
+| stats count by SubjectUserName, Computer, ObjectName, hour
+7. Example Microsoft Sentinel KQL queries
+Mass file deletion
+SecurityEvent
+| where EventID in (4660, 4663)
+| where ObjectName startswith @"D:\Shares\"
+| summarize FileCount=count(), UniqueFiles=dcount(ObjectName)
+    by Account, Computer, bin(TimeGenerated, 10m)
+| where FileCount > 100 or UniqueFiles > 100
+Permission change on shared folder
+SecurityEvent
+| where EventID == 4670
+| where ObjectName startswith @"D:\Shares\"
+| project TimeGenerated, Computer, Account, ObjectName, ProcessName, Activity
+Admin share access
+SecurityEvent
+| where EventID in (5140, 5145)
+| where ShareName has_any ("C$", "D$", "ADMIN$")
+| project TimeGenerated, Computer, Account, ShareName, IpAddress, RelativeTargetName
+Failed access attempts
+SecurityEvent
+| where EventID in (4656, 4663, 5145)
+| where EventData has "Access Denied"
+| summarize FailedAttempts=count()
+    by Account, Computer, IpAddress, bin(TimeGenerated, 10m)
+| where FailedAttempts > 20
+8. Recommended alert thresholds
+
+Start with baseline thresholds, then tune them.
+
+Use Case	Initial Threshold
+Mass deletion	More than 100 deletes in 10 minutes
+Mass modification	More than 500 writes/modifications in 10 minutes
+Permission change	Any change on sensitive share
+Failed access	More than 20 failures in 10 minutes
+Sensitive share access	Any unauthorized user
+Large read activity	More than 1,000 file reads in 30 minutes
+Admin share access	Any non-admin access
+Audit log cleared	Any occurrence
+Service account interactive logon	Any occurrence
+Out-of-hours sensitive access	More than 50 accesses or any permission/delete action
+9. Practical implementation plan
+Phase 1: Start with critical folders
+
+Do not enable full auditing on the entire server at once. It can generate huge logs.
+
+Start with:
+
+D:\Shares\Finance
+D:\Shares\HR
+D:\Shares\Legal
+D:\Shares\Backups
+
+Enable auditing for:
+
+Write
+Delete
+Change permissions
+Take ownership
+Phase 2: Collect key Event IDs
+
+Send these to SIEM:
+
+4663
+4660
+4670
+5140
+5145
+4624
+4625
+4719
+1102
+104
+Phase 3: Build high-value alerts first
+
+Prioritize these:
+
+1. Mass file modification / ransomware behavior
+2. Mass file deletion
+3. Permission change on sensitive shares
+4. Audit log cleared
+5. Admin share access
+6. Service account misuse
+Phase 4: Tune noise
+
+Expect false positives from:
+
+Backup jobs
+Antivirus scans
+Indexing services
+File migration tools
+Robocopy jobs
+Application service accounts
+Scheduled batch jobs
+
+Create allowlists for known good activity:
+
+Backup service accounts
+Approved admin accounts
+File migration servers
+Antivirus processes
+Monitoring tools
+10. Minimum recommended Windows Server configuration
+
+For a good first version, implement this:
+
+Enable Advanced Audit Policy:
+- File System: Success/Failure
+- File Share: Success/Failure
+- Detailed File Share: Success/Failure
+- Logon: Success/Failure
+- Authorization Policy Change: Success/Failure
+
+Enable folder auditing:
+- Sensitive folders only
+- Write, Delete, Change permissions, Take ownership
+
+Collect Event IDs:
+- 4663
+- 4660
+- 4670
+- 5140
+- 5145
+- 4624
+- 4625
+- 4719
+- 1102
+
+Create alerts:
+- Mass deletion
+- Mass modification
+- Permission change
+- Admin share access
+- Log cleared
+- Service account misuse
+
+A good use case title would be:
+
+Detection of suspicious file activity on Windows File Share Servers
+
+And the objective:
+
+Detect ransomware behavior, unauthorized access, privilege abuse, permission tampering, data exfiltration, and audit-log tampering on Windows-based file share servers.
+what security monitoring use cases i can create for sql servers, windows servers in my IT landscape 
+
+I’ll structure this as a practical monitoring catalogue you can reuse: SQL Server use cases, Windows Server use cases, key event sources, and priority levels for implementation.
+
+Thought for a couple of seconds
+
+Below is a practical security monitoring use case catalogue for SQL Servers and Windows Servers in your IT landscape.
+
+You can use this for Splunk, Microsoft Sentinel, Defender, Grafana/Loki, QRadar, or any SIEM.
+
+1. SQL Server security monitoring use cases
+Top SQL Server use cases
+#	Use Case	What to Detect	Severity
+1	Failed SQL login attempts	Repeated failed logins for SQL accounts or AD accounts	Medium / High
+2	Successful login after multiple failures	Brute force followed by success	High
+3	Login from unusual host or IP	SQL login from a new server, workstation, jumpbox, or unexpected subnet	High
+4	Privileged SQL account usage	Use of sa, sysadmin accounts, DBA accounts, or service accounts	High
+5	SQL permission changes	New users, role changes, sysadmin granted, database owner changed	Critical
+6	Database schema changes	Table dropped, altered, stored procedure changed, trigger created	High
+7	Database deletion or modification	DROP DATABASE, TRUNCATE TABLE, mass delete/update	Critical
+8	Suspicious SQL commands	xp_cmdshell, sp_configure, OPENROWSET, linked server abuse	Critical
+9	SQL Server configuration changes	Audit disabled, logging changed, security configuration modified	Critical
+10	Large data extraction	Large number of SELECT queries, bulk export, BCP usage, unusual reads	High
+11	Backup activity monitoring	Unexpected backup creation, backup copied to unusual path	High
+12	SQL Agent job changes	New job created, job modified, job disabled, suspicious command in job	High
+13	Linked server activity	New linked server created or queries executed through linked servers	High
+14	Service account misuse	SQL service account used interactively or from unusual host	High
+15	SQL audit tampering	SQL audit stopped, deleted, disabled, or failed	Critical
+High-priority SQL Server use cases to implement first
+
+Start with these:
+
+Priority	SQL Server Use Case
+P1	SQL audit disabled or tampered
+P1	sysadmin role granted
+P1	xp_cmdshell enabled or executed
+P1	SQL login brute-force followed by success
+P1	Unexpected database backup
+P1	Database dropped or table truncated
+P2	SQL Agent job created or modified
+P2	Login from unusual host
+P2	Large data extraction
+P2	New SQL login/user created
+SQL Server log sources
+
+Collect from:
+
+SQL Server Error Logs
+SQL Server Audit Logs
+Windows Security Event Logs
+Windows Application Logs
+SQL Agent Logs
+Extended Events
+Default Trace, if still available
+Defender for SQL / Microsoft Defender for Cloud, if enabled
+EDR logs from the SQL Server host
+Important SQL Server events/actions to monitor
+Authentication
+Event / Action	Purpose
+Failed login	Detect brute force
+Successful login	Detect suspicious access
+Login from new host	Detect compromise or misuse
+Login using sa	Detect risky privileged account usage
+Privilege and access changes
+
+Monitor actions such as:
+
+CREATE LOGIN
+ALTER LOGIN
+DROP LOGIN
+CREATE USER
+ALTER USER
+DROP USER
+ALTER SERVER ROLE
+ALTER ROLE
+ADD MEMBER
+GRANT
+DENY
+REVOKE
+
+Important roles to monitor:
+
+sysadmin
+securityadmin
+serveradmin
+db_owner
+db_securityadmin
+db_ddladmin
+Dangerous SQL features
+
+Monitor for:
+
+xp_cmdshell
+sp_configure
+OPENROWSET
+OPENDATASOURCE
+linked servers
+OLE Automation Procedures
+CLR enabled
+Ad Hoc Distributed Queries
+
+These are important because attackers may use SQL Server as a way to execute commands, move laterally, or extract data.
+
+Destructive database actions
+
+Monitor:
+
+DROP DATABASE
+DROP TABLE
+TRUNCATE TABLE
+DELETE without WHERE
+ALTER TABLE
+DROP PROCEDURE
+DROP VIEW
+DROP TRIGGER
+
+Severity should be Critical for production databases.
+
+Data exfiltration indicators
+
+Monitor:
+
+Unusual number of SELECT queries
+Large query result sets
+Bulk export activity
+BCP usage
+Backup to unusual path
+Access outside business hours
+Access by unusual user
+Queries from unusual application host
+Example SQL Server alert rules
+Use Case: SQL brute force followed by success
+Alert when:
+Same account has more than 10 failed SQL logins within 10 minutes
+followed by a successful login within the next 15 minutes.
+
+Severity:
+
+High
+Use Case: Sysadmin role granted
+Alert when:
+Any login or user is added to sysadmin role.
+
+Severity:
+
+Critical
+Use Case: xp_cmdshell enabled
+Alert when:
+sp_configure is used to enable xp_cmdshell.
+
+Severity:
+
+Critical
+Use Case: Unexpected SQL backup
+Alert when:
+A production database backup is created outside the approved backup window
+or written to an unusual location.
+
+Severity:
+
+High
+2. Windows Server security monitoring use cases
+Top Windows Server use cases
+#	Use Case	What to Detect	Severity
+1	Failed Windows logon attempts	Repeated failed logons against a server	Medium / High
+2	Successful logon after failures	Possible brute-force success	High
+3	Privileged account logon	Domain Admin, Server Admin, Backup Admin logging onto servers	High
+4	Interactive logon to server	RDP or console login by user or service account	Medium / High
+5	Local administrator group changes	User added to local Administrators group	Critical
+6	New local user created	Local account creation on server	High
+7	Service installation	New Windows service created	High
+8	Scheduled task creation	New scheduled task created or modified	High
+9	PowerShell suspicious activity	Encoded command, download cradle, execution bypass	High / Critical
+10	Security log cleared	Windows Security Event Log cleared	Critical
+11	Audit policy changed	Logging or audit policy disabled or modified	Critical
+12	Windows Defender disabled	AV/EDR protection stopped or disabled	Critical
+13	Firewall rule changed	New inbound rule or firewall disabled	High
+14	Credential dumping indicators	LSASS access, suspicious process activity	Critical
+15	Remote administration abuse	PsExec, WinRM, WMI, RDP, SMB lateral movement	High
+16	File integrity monitoring	Changes to critical system files or application folders	High
+17	Service account misuse	Service account used interactively or on unusual server	High
+18	Unusual process execution	Unknown EXE from temp/download/user profile path	High
+19	Server reboot or shutdown	Unexpected restart or shutdown	Medium / High
+20	Patch/security update failure	Critical security patches missing or failed	Medium / High
+High-priority Windows Server use cases to implement first
+Priority	Windows Server Use Case
+P1	Security log cleared
+P1	Local administrator group modified
+P1	Defender/EDR disabled
+P1	New Windows service installed
+P1	Suspicious PowerShell execution
+P1	Privileged account logon to server
+P1	Service account interactive logon
+P2	Scheduled task created
+P2	Failed logon followed by success
+P2	Firewall rule changed
+P2	New local user created
+P2	RDP from unusual source
+Important Windows Event IDs
+Logon and authentication
+Event ID	Meaning
+4624	Successful logon
+4625	Failed logon
+4634	Logoff
+4647	User initiated logoff
+4648	Logon with explicit credentials
+4672	Special privileges assigned to new logon
+4776	NTLM authentication
+4768	Kerberos TGT requested
+4769	Kerberos service ticket requested
+4771	Kerberos pre-authentication failed
+User and group changes
+Event ID	Meaning
+4720	User account created
+4722	User account enabled
+4723	Password change attempted
+4724	Password reset attempted
+4725	User account disabled
+4726	User account deleted
+4732	Member added to local group
+4733	Member removed from local group
+4728	Member added to global group
+4729	Member removed from global group
+4756	Member added to universal group
+4757	Member removed from universal group
+Policy and audit changes
+Event ID	Meaning
+4719	System audit policy changed
+4739	Domain policy changed
+4902	Per-user audit policy table created
+4906	CrashOnAuditFail value changed
+4907	Auditing settings on object changed
+1102	Security log cleared
+104	Event log cleared
+Services, tasks, and processes
+Event ID	Meaning
+4688	Process creation
+4697	Service installed
+7045	New service installed
+4698	Scheduled task created
+4699	Scheduled task deleted
+4702	Scheduled task updated
+Windows Defender / security protection
+Event ID	Meaning
+5007	Defender configuration changed
+5013	Defender tamper protection event
+1116	Malware detected
+1117	Malware remediation action taken
+1118	Malware remediation failed
+5001	Defender real-time protection disabled
+RDP and remote access
+Event ID	Meaning
+4624	Successful logon
+4625	Failed logon
+4778	RDP session reconnected
+4779	RDP session disconnected
+1149	RDP authentication succeeded
+
+Useful logon types:
+
+Logon Type	Meaning
+2	Interactive logon
+3	Network logon
+4	Batch logon
+5	Service logon
+10	Remote Interactive / RDP
+3. Combined SQL Server + Windows Server use cases
+
+These are especially valuable because SQL Server runs on Windows. You should monitor both layers together.
+
+Combined use cases
+#	Use Case	Correlation Logic	Severity
+1	SQL compromise followed by OS command execution	SQL xp_cmdshell enabled + Windows process creation	Critical
+2	SQL service account used interactively	SQL service account logs on via RDP or console	Critical
+3	SQL backup exfiltration	SQL backup created + file copied/read outside backup path	High
+4	DBA account logs on to Windows server unexpectedly	DBA account RDPs to SQL server outside change window	High
+5	Privileged SQL change after unusual Windows logon	RDP from unusual IP followed by SQL role change	Critical
+6	SQL Agent abuse	SQL Agent job created + command shell / PowerShell executed	Critical
+7	Security logging disabled before SQL activity	Windows audit policy changed + SQL audit stopped	Critical
+8	Lateral movement to SQL Server	SMB/RDP/WinRM access to SQL server from unusual host	High
+9	EDR/Defender disabled on SQL Server	Defender disabled + suspicious SQL or OS activity	Critical
+10	Mass data read from database followed by archive creation	Large SELECT/export + ZIP/7z/RAR process created	High
+4. Monitoring by server type
+Domain Controllers
+
+High-priority use cases:
+
+Privileged group membership changes
+Kerberos anomalies
+NTLM brute force
+Golden Ticket indicators
+DCShadow indicators
+Replication abuse
+New domain admin
+GPO changes
+Account lockout spikes
+Password spray attacks
+
+Important events:
+
+4624, 4625, 4672, 4720, 4728, 4732, 4739, 4768, 4769, 4771, 4776
+File Servers
+
+High-priority use cases:
+
+Mass file deletion
+Mass file modification
+Ransomware-like extension changes
+Permission changes
+Sensitive share access
+Admin share access
+Large file reads
+Service account misuse
+Audit log cleared
+
+Important events:
+
+4663, 4660, 4670, 5140, 5145, 4624, 4625, 4719, 1102
+SQL Servers
+
+High-priority use cases:
+
+SQL brute force
+sysadmin granted
+xp_cmdshell enabled
+Unexpected backup
+SQL Agent job abuse
+Database dropped
+Large data extraction
+SQL audit disabled
+Service account misuse
+
+Important sources:
+
+SQL Audit Logs
+SQL Error Logs
+SQL Agent Logs
+Windows Security Logs
+Windows Application Logs
+Defender/EDR
+Application Servers
+
+High-priority use cases:
+
+New service installed
+Suspicious PowerShell
+Web shell indicators
+IIS log anomalies
+Application pool identity misuse
+Unexpected outbound connection
+Config file changes
+Local admin group changes
+
+Important events:
+
+4688, 4697, 7045, 4698, 4624, 4625, 4732, 1102
+Backup Servers
+
+High-priority use cases:
+
+Backup job disabled
+Backup deleted
+Backup repository accessed
+Admin logon outside change window
+Ransomware access to backup path
+Service account misuse
+Backup software configuration changed
+
+Severity should be high because backup servers are critical during ransomware incidents.
+
+5. Recommended use case catalogue
+
+You can create your monitoring catalogue like this.
+
+Use Case ID	Use Case Name	Platform	Priority
+WIN-001	Security Event Log Cleared	Windows Server	P1
+WIN-002	Audit Policy Changed	Windows Server	P1
+WIN-003	Local Administrator Group Modified	Windows Server	P1
+WIN-004	New Local User Created	Windows Server	P1
+WIN-005	New Windows Service Installed	Windows Server	P1
+WIN-006	Suspicious PowerShell Execution	Windows Server	P1
+WIN-007	Defender Disabled or Tampered	Windows Server	P1
+WIN-008	RDP Logon from Unusual Source	Windows Server	P2
+WIN-009	Privileged Account Logon	Windows Server	P1
+WIN-010	Service Account Interactive Logon	Windows Server	P1
+WIN-011	Scheduled Task Created or Modified	Windows Server	P2
+WIN-012	Firewall Configuration Changed	Windows Server	P2
+SQL-001	SQL Failed Login Brute Force	SQL Server	P1
+SQL-002	SQL Login Success After Failures	SQL Server	P1
+SQL-003	SQL Sysadmin Role Granted	SQL Server	P1
+SQL-004	SQL Login or User Created	SQL Server	P1
+SQL-005	xp_cmdshell Enabled or Executed	SQL Server	P1
+SQL-006	SQL Audit Disabled or Failed	SQL Server	P1
+SQL-007	Unexpected Database Backup	SQL Server	P1
+SQL-008	Database Dropped or Table Truncated	SQL Server	P1
+SQL-009	SQL Agent Job Created or Modified	SQL Server	P2
+SQL-010	Large Data Extraction	SQL Server	P2
+COR-001	SQL Service Account Interactive Logon	SQL + Windows	P1
+COR-002	SQL Backup Followed by File Copy	SQL + Windows	P1
+COR-003	xp_cmdshell Followed by Process Execution	SQL + Windows	P1
+COR-004	RDP to SQL Server Followed by Privileged SQL Change	SQL + Windows	P1
+COR-005	Defender Disabled Followed by Suspicious SQL Activity	SQL + Windows	P1
+6. Suggested implementation roadmap
+Phase 1: Critical detection
+
+Implement these first:
+
+Security log cleared
+Audit policy changed
+Local admin group modified
+New service installed
+Suspicious PowerShell
+Defender disabled
+SQL sysadmin granted
+SQL audit disabled
+xp_cmdshell enabled
+Unexpected SQL backup
+SQL brute force followed by success
+Phase 2: Lateral movement and misuse
+
+Add:
+
+RDP from unusual source
+WinRM activity
+WMI activity
+PsExec-style service creation
+Service account interactive logon
+Admin share access
+Explicit credential usage
+Phase 3: Data protection
+
+Add:
+
+Large SQL data extraction
+Unexpected SQL backup
+Backup file copied
+Sensitive file share access
+Mass file deletion
+Mass file modification
+Database dropped or table truncated
+Phase 4: Baselining and anomaly detection
+
+Add:
+
+Login from new host
+Access outside business hours
+Unusual process execution
+Unusual parent-child process relationship
+New scheduled task
+New outbound connection from server
+7. Example alert format
+
+For each monitoring use case, document it like this:
+
+Use Case Name:
+SQL Sysadmin Role Granted
+
+Objective:
+Detect unauthorized privilege escalation in SQL Server.
+
+Data Sources:
+SQL Server Audit Logs
+Windows Security Logs
+
+Detection Logic:
+Trigger alert when any login or user is added to the sysadmin fixed server role.
+
+Severity:
+Critical
+
+MITRE Mapping:
+Privilege Escalation
+
+Response:
+1. Validate whether this was part of approved change.
+2. Identify who made the change.
+3. Check source host and login time.
+4. Review recent activity by the modified account.
+5. Remove privilege if unauthorized.
+6. Raise security incident if suspicious.
+8. My recommended top 15 for your IT landscape
+
+Since your environment includes Windows Servers, SQL Server clusters, file share servers, external connections, and monitoring tooling, I would start with these:
+
+Rank	Use Case	Platform
+1	Security log cleared	Windows
+2	Local administrator group modified	Windows
+3	Defender/EDR disabled	Windows
+4	Suspicious PowerShell execution	Windows
+5	New service installed	Windows
+6	Privileged account logon to server	Windows
+7	Service account interactive logon	Windows
+8	SQL sysadmin role granted	SQL
+9	SQL audit disabled or failed	SQL
+10	xp_cmdshell enabled or executed	SQL
+11	SQL login brute force followed by success	SQL
+12	Unexpected SQL database backup	SQL
+13	SQL Agent job created or modified	SQL
+14	Database dropped or table truncated	SQL
+15	RDP to SQL Server followed by privileged SQL change	SQL + Windows
+
+These 15 give you strong coverage for:
+
+Credential attacks
+Privilege escalation
+Persistence
+Lateral movement
+Defense evasion
+Ransomware behavior
+Data theft
+Database compromise
+Insider threat
+Audit tampering
