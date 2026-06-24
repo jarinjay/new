@@ -1177,3 +1177,37 @@ Data theft
 Database compromise
 Insider threat
 Audit tampering
+
+
+
+-----------------------
+
+
+
+Database Server Security Monitoring Use Cases
+#	Security Monitoring Use Case	What to Detect	Why It Matters
+1	Failed Database Login Attempts	Repeated failed SQL/database login attempts from the same user, host, or IP	May indicate brute-force, password spraying, or credential misuse
+2	Successful Login After Multiple Failures	A successful database login shortly after repeated failed attempts	Strong sign that an attacker may have guessed or obtained valid credentials
+3	Privileged Database Account Usage	Use of sa, DBA accounts, sysadmin, db_owner, or other privileged roles	Privileged accounts can read, modify, delete, or export sensitive data
+4	Database Role or Permission Changes	Users added to sysadmin, db_owner, security roles, or granted excessive permissions	Detects privilege escalation and unauthorized access expansion
+5	New Database Login or User Created	New SQL login, database user, service account, or application account created	Attackers may create accounts to maintain persistent access
+6	Database Audit Disabled or Modified	SQL audit stopped, disabled, deleted, or audit configuration changed	Indicates possible attempt to hide malicious database activity
+7	Dangerous SQL Feature Enabled or Used	Use of xp_cmdshell, sp_configure, linked servers, OPENROWSET, or OLE automation	These features can be abused for command execution, lateral movement, or data extraction
+8	Database Destructive Operations	DROP DATABASE, DROP TABLE, TRUNCATE TABLE, mass DELETE, or unauthorized schema changes	Can cause data loss, application outage, or business disruption
+9	Unexpected Database Backup	Backup created outside approved schedule or written to unusual location	Database backups can be used to steal complete datasets
+10	Large Data Extraction	Unusual large SELECT activity, bulk export, BCP usage, or access to many sensitive tables	May indicate data exfiltration or insider threat activity
+
+Windows Server Security Monitoring Use Cases
+#	Security Monitoring Use Case	What to Detect	Why It Matters
+1	Failed Windows Logon Attempts	Repeated failed logons from the same user, host, or IP	May indicate brute-force, password spraying, or unauthorized access attempts
+2	Successful Logon After Multiple Failures	Successful Windows logon shortly after repeated failed attempts	Indicates a possible successful compromise after password guessing
+3	Privileged Account Logon	Domain Admin, local admin, server admin, backup admin, or service account logon	Privileged accounts can change configurations, access sensitive systems, and move laterally
+4	Local Administrator Group Modified	User added to or removed from local Administrators group	Detects privilege escalation or unauthorized admin access
+5	New Local User Created	Creation of new local user accounts on Windows servers	Attackers often create local accounts for persistence
+6	Security Log Cleared or Audit Policy Changed	Windows Security log cleared, event logs cleared, or audit policy modified	Strong indicator of defense evasion or attempt to hide activity
+7	Suspicious PowerShell or Command Execution	Encoded PowerShell, execution policy bypass, suspicious scripts, cmd.exe, wscript, cscript, or unusual process execution	Common technique for malware execution, lateral movement, and credential theft
+8	New Windows Service Installed	New service created, especially from unusual paths or by unexpected users	Attackers use services for persistence and remote execution
+9	Scheduled Task Created or Modified	New or changed scheduled task on servers	Scheduled tasks are commonly used for persistence and automated malicious execution
+10	Defender, EDR, or Firewall Tampering	Antivirus disabled, Defender settings changed, EDR service stopped, or firewall rule modified	Indicates possible preparation for malware execution or stealthy access
+
+
