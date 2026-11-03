@@ -6,3 +6,12 @@ $p = Start-Process msiexec.exe `
     -Wait -PassThru
 
 $p.ExitCode
+
+
+
+$msi = "C:\Temp\IntegrationRuntime_5.71.9776.1.msi"
+
+Test-Path $msi
+
+Get-AuthenticodeSignature $msi |
+Select-Object Status,@{N="Signer";E={$_.SignerCertificate.Subject}}
