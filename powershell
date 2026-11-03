@@ -1,0 +1,8 @@
+$msi = "C:\Temp\IntegrationRuntime_5.71.9776.1.msi"
+$log = "C:\Temp\SHIR-upgrade.log"
+
+$p = Start-Process msiexec.exe `
+    -ArgumentList "/i `"$msi`" /qn /norestart /L*v `"$log`"" `
+    -Wait -PassThru
+
+$p.ExitCode
